@@ -1,0 +1,327 @@
+import random
+# ================== DECK ==================
+deck = ["♠A","♠2","♠3","♠4","♠5","♠6","♠7","♠8","♠9","♠10","♠J","♠Q","♠K",
+        "♥A","♥2","♥3","♥4","♥5","♥6","♥7","♥8","♥9","♥10","♥J","♥Q","♥K",
+        "♦A","♦2","♦3","♦4","♦5","♦6","♦7","♦8","♦9","♦10","♦J","♦Q","♦K",
+        "♣A","♣2","♣3","♣4","♣5","♣6","♣7","♣8","♣9","♣10","♣J","♣Q","♣K"]
+
+
+RANKS = {"2":2,"3":3,"4":4,"5":5,"6":6,"7":7,"8":8,"9":9,"10":10,"J":11,"Q":12,"K":13,"A":14}
+
+# Use 6 decks
+shoe = deck * 6
+random.shuffle(shoe)
+
+
+def deal_card():
+    return shoe.pop()
+
+# ================== HAND VALUE ==================
+def calculate_hand(hand): #hand is a variable to use
+    total = 0
+    soft_aces = 0
+    for card in hand:
+        rank = card[1:]
+        if rank == "A":
+            total += 11
+            soft_aces += 1
+        elif rank in ("K","Q","J"):
+            total += 10
+        else:
+            total += int(rank)
+    while total > 21 and soft_aces > 0:
+        total -= 10 #A is equal 1/11 if getting 2 aces, minus 10, soft_aces always equal 0 to prevent multipal 11
+        soft_aces -= 1
+    return total
+
+# ============= Pair checking ==============
+def is_pair(hand):  #pair checking
+    return len(hand) == 2 and hand[0][1:] == hand[1][1:]
+
+# ============= Ace checking===============
+def is_ace(card): #Ace card checking
+    return card[1:] == "A"
+
+#=================== PLAYER TURN FUNCTION ==================
+def player_turn(initial_hand, initial_bet, player_capital):
+    hands = [initial_hand]
+    bets = [initial_bet]
+
+    hand_index = 0
+
+    while hand_index < len(hands):
+        hand = hands[hand_index] #e.g: hands[0], hands[1] represent separate hands, adding the index can track which hand it is
+        bet = bets[hand_index] #same
+
+        first_action = True  # ✅ reset per hand
+
+        print(f"\nPlaying hand {hand_index + 1}: {hand} ({calculate_hand(hand)})") #first hand
+
+        # ---------- SPLIT ACES: AUTO STAND ----------
+        if len(hand) == 2 and is_ace(hand[0]) and is_ace(hand[1]):
+            print("Split Aces — one card only. Standing automatically.")
+            hand_index += 1
+            continue
+
+        while True:
+            value = calculate_hand(hand) #bust
+            if value >= 21:
+                break
+
+            options = ["1 = Hit", "2 = Stand"] #first options
+
+            if first_action and player_capital >= bet: #in case player don't have enough money
+                options.append("3 = Double")
+
+            if first_action and is_pair(hand) and player_capital >= bet:
+                options.append("4 = Split")
+
+            print("Options:", ", ".join(options))
+
+            try:
+                choice = int(input("Please make your decision: "))
+            except ValueError:
+                print("Invalid input.")
+                continue
+
+            # ---------- HIT ----------
+            if choice == 1:
+                hand.append(deal_card())
+                print(f"Cards: {hand} ({calculate_hand(hand)})")
+                first_action = False #not first hand anymore, 3/4 not offer
+
+                if calculate_hand(hand) > 21:
+                    print("BUST!")
+                    break #game over, loop closed
+
+            # ---------- STAND ----------
+            elif choice == 2:
+                break #dealer turn
+
+            # ---------- DOUBLE ----------
+            elif choice == 3 and first_action and player_capital >= bet:
+                player_capital -= bet #double down need to cost the main bet again
+                bets[hand_index] *= 2
+                hand.append(deal_card()) #only receive 1 card
+                print(f"Double card: {hand} ({calculate_hand(hand)})")
+                break
+
+            # ---------- SPLIT ----------
+            elif choice == 4 and first_action and is_pair(hand) and player_capital >= bet:
+
+                player_capital -= bet #Splitting a pair need to cost the main bet again
+                c1, c2 = hand #c1 = hand[0], c2=hand[1], only two card exist now
+
+                # ----- SPLIT ACES -----
+                if is_ace(c1):
+                    h1 = [c1, deal_card()]
+                    h2 = [c2, deal_card()]
+
+                    hands[hand_index] = h1 #Replace the current hand
+                    hands.insert(hand_index + 1, h2) #hands[0] is the first split half, and adding the second half
+                    bets.insert(hand_index + 1, bet) #
+
+                    print("Split Aces — one card only.")
+                    break  # auto-stand on both ace hands
+
+                # ----- NORMAL SPLIT -----
+                h1 = [c1, deal_card()] #first split hand
+                h2 = [c2, deal_card()] #second split hand
+
+                hands[hand_index] = h1 #Replace the current hand
+                hands.insert(hand_index + 1, h2)
+                bets.insert(hand_index + 1, bet)
+
+                print("Hand split.")
+                print(f"Now your FIRST hand is Player hand {hand_index+1}: {h1} ({calculate_hand(hand)}), you have £{player_capital}.")
+
+                first_action = True
+                continue  # ✅ stay on first split hand
+
+
+            else:
+                print("Invalid option.")
+
+        hand_index += 1 #done with a hand, moving to the next one
+
+    return hands, bets, player_capital
+
+
+# ================== 3-CARD STRAIGHT ==================
+def is_3_card_straight(ranks):
+    try:
+        values = sorted({RANKS[r] for r in ranks}) #set comprehension: Using a set automatically removes duplicates, sort it in order.
+
+    except KeyError:
+        return False
+    if len(values) != 3:
+        return False
+    if values[2] - values[0] == 2: #straight must always equal 2
+        return True
+    if values == [2,3,14]:  # A-2-3
+        return True
+    return False
+
+# ================== GAME ==================
+print("===============================")
+print(" Welcome to Blackjack Game ")
+print("===============================")
+
+new_game = True
+
+while new_game:
+    # --- Buy-in ---
+    while True:
+        try:
+            player_capital = int(input("Enter buy-in amount: £"))
+            if player_capital <= 0:
+                print("Amount must be greater than 0.")
+                continue
+            break
+        except ValueError:
+            print("Type a number only.")
+
+    # --- Game rounds ---
+    while player_capital > 0:
+        # Bets
+        while True:
+            try:
+                main_bet = int(input("\nPlace main bet: £"))
+                side_bet = int(input("Place side bet: £"))
+
+                if main_bet <= 0 or side_bet < 0:
+                    print("Bets must be positive.")
+                    continue #loop again
+                if main_bet + side_bet > player_capital:
+                    print(f"Not enough money. You have £{player_capital}.")
+                    continue
+                break
+            except ValueError:
+                print("Type numbers only.")
+
+        player_capital -= main_bet + side_bet
+
+        print(f"You now have {player_capital}.")
+
+        # Deal cards
+        player_card = [deal_card(), deal_card()]
+        dealer_card = [deal_card(), deal_card()]
+
+        dealer_hand = calculate_hand(dealer_card)
+
+        print(f"\nPlayer hand: {player_card} ({calculate_hand(player_card)})")
+
+        print(f"Dealer shows: {dealer_card[0]}")
+
+        # ================= SIDE BETS =================
+
+        def side_bet_payout(player_cards, dealer_up):
+
+            p1, p2 = player_cards
+            d1 = dealer_up
+
+            r1, r2, r3 = p1[1:], p2[1:], d1[1:]
+            s1, s2, s3 = p1[0], p2[0], d1[0]
+            ranks = [r1, r2, r3]
+            # Straight Flush
+            if is_3_card_straight(ranks) and s1 == s2 == s3:
+                return 180, "Straight Flush"
+            # Three of a Kind
+            if r1 == r2 == r3:
+                return 90, "Three of a Kind"
+            # Perfect Pair
+            if r1 == r2 and s1 == s2:
+                return 30, "Perfect Pair"
+            # Colored Pair
+            if r1 == r2 and ((s1 in "♣♠" and s2 in "♣♠") or (s1 in "♦♥" and s2 in "♦♥")):
+                return 10, "Colored Pair"
+            # Mixed Pair
+            if r1 == r2:
+                return 5, "Mixed Pair"
+            # Straight
+            if is_3_card_straight(ranks):
+                return 9, "Straight"
+            # Flush
+            if s1 == s2 == s3:
+                return 9, "Flush"
+            return 0, None
+
+        payout, side_bet_name = side_bet_payout(player_card, dealer_card[0])
+
+        if payout > 0:
+            player_capital += side_bet * (payout + 1)
+            print(f"Side bet win: {side_bet_name} ({payout}:1)! You wins £{payout * side_bet}, Now you have £{player_capital}")
+        else:
+            print("Side bet lose")
+
+        # ================= PLAYER BLACKJACK =================
+        if calculate_hand(player_card) == 21 and len(player_card) == 2:
+            print(f"\nPlayer has Blackjack! Now you have £{player_capital}.🤑🤑🤑")
+
+            if calculate_hand(dealer_card) == 21:
+                player_capital += main_bet
+                print("Dealer also has Blackjack! PUSH.")
+            else:
+                player_capital += int(main_bet * 2.5)
+                print(f"Blackjack pays 3:2. Now you have £{player_capital}.🤑🤑🤑")
+
+            # 🔒 END ROUND COMPLETELY
+            continue
+
+        #==================== PLAYER TURN ======================
+        player_hands, player_bets, player_capital = player_turn(
+            player_card,
+            main_bet,
+            player_capital
+        )
+
+        # ================= DEALER TURN =================
+        print(f"Dealer cards: {dealer_card} ({dealer_hand})")
+        while calculate_hand(dealer_card) < 17:
+            dealer_card.append(deal_card())
+            dealer_hand = calculate_hand(dealer_card)
+            print(f"\nDealer draws: {dealer_card} ({dealer_hand})")
+
+        # ================= RESULT =================
+        dealer_value = calculate_hand(dealer_card)
+
+        for hand, bet in zip(player_hands, player_bets): # since we probably have many hands and bets from splitting.
+            hand_value = calculate_hand(hand) #each player hand to count
+
+            if hand_value > 21:
+                print(f"Hand {hand} busted.")
+                continue
+
+            if dealer_value > 21:
+                player_capital += bet * 2
+                print(f"Hand {hand} wins (dealer bust). Now you have £{player_capital}.🤑🤑🤑")
+
+            elif hand_value > dealer_value:
+                player_capital += bet * 2
+                print(f"Hand {hand} wins. Now you have £{player_capital}.🤑🤑🤑")
+
+            elif hand_value == dealer_value:
+                player_capital += bet
+                print(f"Hand {hand} pushes. Now you have £{player_capital}.😢😢😢")
+
+            else:
+                print(f"Hand {hand} loses. Now you have £{player_capital}.😭😭😭")
+
+        # ================= NEXT ROUND =================
+        while True:
+            try:
+                cont = int(input("\nPlay next round? (1 = Yes, 2 = No): "))
+                if cont not in (1,2):
+                    print("Choose 1 or 2.")
+                    continue
+                break
+            except ValueError:
+                print("Type 1 or 2 only.")
+
+        if cont == 2:
+            new_game = False
+            print("Thanks for playing!😂😂😂")
+            break
+
+print("GAME OVER😴😴😴")
+
